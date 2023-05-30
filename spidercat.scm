@@ -24,11 +24,13 @@
         (prefix uri-common uri:))
 
 
+;; Santize text for placement in HTML.
 (define (sanitize-html text)
   (irregex-replace/all
    "{" (spiffy:htmlize text) "&#123;"))
 
 
+;; Generate HTML from a template-file, substituting in variables as appropriate.
 (define (html-from-template template-file variables-alist)
   (let ([text (call-with-input-file template-file
                 (lambda (in-port) (read-string #f in-port)))])
@@ -42,6 +44,7 @@
     text))
 
 
+;; Generate HTML for a listing of all rooms the user's joined.
 (define (room-listing-html irc-dir)
   (html-from-template
    "templates/room-list.html"
@@ -58,26 +61,69 @@
                (chatdir:channels irc-dir)))))))
 
 
+;; Send response for a listing of joined rooms.
 (define (http-get-room irc-dir #!optional request continue)
   (spiffy:send-response status: 'ok
                         body: (room-listing-html irc-dir)))
 
 
+;; Send response for the / index.
+(define (http-get-root #!optional irc-dir request continue)
+  (spiffy:send-response status: 'ok body: "<h1>Index!!</h1>"))
+
+
+;; Send a 404 response, with disappointed text.
+(define (http-404 #!optional irc-dir request continue)
+  (spiffy:send-response code: 404 body: "<h1>Sad!</h1>"))
+
+
+;; Send the static style CSS.
+(define (http-get-style #!optional irc-dir request continue)
+  (spiffy:send-response
+   status: 'ok
+   body: (call-with-input-file "templates/style.css"
+           (lambda (in-port) (read-string #f in-port)))
+   headers: '((content-type "text/css"))))
+
+
+;; An associative list of all GET handlers, to be used by assoc-by-path.
+(define http-get-handlers
+  `(((/ "room") . ,http-get-room)
+    ((/ "style.css") . ,http-get-style)
+    ((/ "*") . ,http-404)
+    ((/ "") . ,http-get-root)))
+
+
+;; Get a pair from an associative list based on the closest match to the
+;; given path. Wild-cards acceptable! For example…
+;;     '(/ "dad" "mom") matches, in order of precedence:
+;;     '(/ "dad" "mom") '(/ "dad" "*") '(/ "*")
+(define (assoc-by-path path-list alist #!optional (top-level #t))
+  (print path-list)
+  (let* ([our-list=
+          (lambda (a b)
+            (list= equal? a b))]
+         [parent-path (drop-right path-list 1)]
+         [exact
+          (and top-level
+               (assoc path-list
+                      alist our-list=))]
+         [inexact
+          (assoc (append parent-path '("*"))
+                 alist our-list=)])
+    (or exact
+        inexact
+        (and (not (null? parent-path))
+             (assoc-by-path parent-path alist #f)))))
+
+
 ;; Handle all GET requests.
 (define (http-get irc-dir request continue)
-  (let ([path (uri:uri-path (intarweb:request-uri request))])
-    (cond [(starts-with? path '(/ "room"))
-           (http-get-room irc-dir request continue)]
-          [(starts-with? path '(/ "style.css"))
-           (spiffy:send-response
-            status: 'ok
-            body: (call-with-input-file "templates/style.css"
-                    (lambda (in-port) (read-string #f in-port)))
-            headers: '((content-type "text/css")))]
-          [(list= equal? path '(/))
-           (spiffy:send-response status: 'ok body: "<h1>Index ♥</h1>")]
-          [#t
-           (continue)])))
+  (let* ([path (uri:uri-path (intarweb:request-uri request))]
+         [handler (assoc-by-path path http-get-handlers)])
+    (if handler
+        (apply (cdr handler) (list irc-dir request continue))
+        (continue))))
 
 
 ;; Handle all POST requests.
@@ -112,4 +158,4 @@
          list-start))
 
 
- (start-server "/home/jaidyn/Chat/IRC/leagueh/")
+;; (start-server "/home/jaidyn/Chat/IRC/leagueh/")
