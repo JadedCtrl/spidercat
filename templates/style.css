@@ -1,0 +1,15 @@
+.room-list-item {
+	background-color: #d7d7af;
+}
+
+.room-list-item {
+	color: black;
+}
+
+.room-list-item:hover {
+	background-color: #d7ff87;
+}
+
+.room-list-item:target {
+	background-color: #5fafd7;
+}
