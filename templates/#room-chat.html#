@@ -8,7 +8,15 @@
 	<meta http-equiv="refresh" content="20">
   </head>
   <body>
-	<form id="send" method="post" target="messages" action="messages#bottom">
+		<frameset cols="424px,*">
+	  <frame name="rooms" src="/room">
+	  <frame name="main" src="/room">
+	</frameset>
+
+	<table>
+	  {{LIST_ITEMS}}
+	</table>
+	<form id="send" method="post">
 	  <input name="message" />
 	  <button>Send</button>
 	</form>

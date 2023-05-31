@@ -1,15 +1,21 @@
-.room-list-item {
+.room-list li {
 	background-color: #d7d7af;
+	margin:5px;
+	padding: 5px;
 }
 
-.room-list-item {
+.room-list li {
 	color: black;
 }
 
-.room-list-item:hover {
+.room-list li:hover {
 	background-color: #d7ff87;
 }
 
-.room-list-item:target {
+.room-list li:target {
 	background-color: #5fafd7;
+}
+
+input {
+	width: 100%;
 }
