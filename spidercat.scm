@@ -119,28 +119,35 @@
    `(("USER_NAME" . ,user))))
 
 
-;; Generate the HTML listing a room's chat messages.
-(define (room-chat-html irc-dir channel)
+(define (room-index-html irc-dir channel)
   (html-from-template
-   "templates/room-chat.html"
+   "templates/room-index.html"
+   `(("ROOM_TITLE" . ,(uri:uri-decode-string channel))
+     ("ROOM_ID" . ,(uri:uri-encode-string channel)))))
+
+
+;; Generate the HTML listing a room's chat messages.
+(define (room-messages-html irc-dir channel)
+  (html-from-template
+   "templates/room-messages.html"
    `(("ROOM_TITLE" . ,(uri:uri-decode-string channel))
      ("LIST_ITEMS"
       . ,(reduce-right
           string-append ""
           (map (lambda (message)
-                 (room-chat-item-html irc-dir channel message))
+                 (room-messages-item-html irc-dir channel message))
                (channel-messages-sorted
                 irc-dir
                 (uri:uri-decode-string channel))))))))
 
 
 ;; Generate the HTML for a specific message in a specific room.
-;; Used to substitute {{LIST_ITEMS}} in the room-chat template.
-(define (room-chat-item-html irc-dir channel message)
+;; Used to substitute {{LIST_ITEMS}} in the room-messages template.
+(define (room-messages-item-html irc-dir channel message)
   (if (and (list? message)
            (string? (car message)))
       (html-from-template
-       "templates/room-chat-item.html"
+       "templates/room-messages-item.html"
        `(("MESSAGE_SENDER"
           . ,(html-encode-string
               (alist-ref 'user.chat.sender (cdr message))))
@@ -166,6 +173,7 @@
                         body: (room-listing-html irc-dir)))
 
 
+
 (define (http-get-room-dir irc-dir #!optional request path)
   (let* ([channel (third path)]
          [channel? (member channel (chatdir:channels irc-dir))]
@@ -178,9 +186,13 @@
      [(equal? sub-path "users")
       (spiffy:send-response status: 'ok
                             body: (room-users-html irc-dir channel))]
-     [#t
+     [(equal? sub-path "messages")
       (spiffy:send-response status: 'ok
-                            body: (room-chat-html irc-dir channel))])))
+                            body: (room-messages-html irc-dir channel))]
+     [(or (not sub-path) (string=? sub-path ""))
+      (spiffy:send-response status: 'ok
+                            body: (room-index-html irc-dir channel))])))
+
 
 
 
