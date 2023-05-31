@@ -141,7 +141,8 @@
 
 ;; Send response for the / index.
 (define (http-get-root #!optional irc-dir request path)
-  (spiffy:send-response status: 'ok body: "<h1>Index!!</h1>"))
+  (spiffy:send-response status: 'ok body:
+                        (html-from-template "templates/index.html" '())))
 
 
 ;; Send a 404 response, with disappointed text.
@@ -164,7 +165,7 @@
     ((/ "room" "*") . ,http-get-room-dir)
     ((/ "style.css") . ,http-get-style)
     ((/ "*") . ,http-404)
-    ((/ "") . ,http-get-root)))
+    (("*") . ,http-get-root)))
 
 
 ;; Get a pair from an associative list based on the closest match to the
