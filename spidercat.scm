@@ -16,8 +16,9 @@
 ;;
 
 (import scheme
-        (chicken io) (chicken string) (chicken irregex) (chicken pretty-print)
-        srfi-1
+        (chicken io) (chicken sort) (chicken string) (chicken irregex)
+        (chicken pretty-print)
+        srfi-1 srfi-19
         (prefix chatdir chatdir:)
         (prefix intarweb intarweb:)
         (prefix spiffy spiffy:)
@@ -61,6 +62,30 @@
                (chatdir:channels irc-dir)))))))
 
 
+;; Returns all of a channel's messages — in alist format, with parsed datetimes.
+(define (channel-messages irc-dir channel)
+  (map (lambda (msg-alist)
+         (let ([date-str (alist-ref 'user.chat.date (cdr msg-alist))])
+           (append
+            (list (car msg-alist))
+            (alist-update 'user.chat.date
+                          (string->date date-str "~Y-~m-~dT~H:~M:~S~z")
+                          (cdr msg-alist)))))
+       (map (lambda (message)
+              (chatdir:channel-message-get irc-dir channel message))
+            (chatdir:channel-messages irc-dir channel))))
+
+
+;; Returns all of a channel's messages, sorted in order of datetime.
+(define (channel-messages-sorted irc-dir channel)
+  (sort
+   (channel-messages irc-dir channel)
+   (lambda (a b)
+     (date>? (alist-ref 'user.chat.date (cdr a))
+             (alist-ref 'user.chat.date (cdr b))))))
+
+
+
 ;; Generate the HTML listing a room's chat messages.
 (define (room-chat-html irc-dir channel)
   (html-from-template
@@ -71,7 +96,7 @@
           string-append ""
           (map (lambda (message)
                  (room-chat-item-html irc-dir channel message))
-               (chatdir:channel-messages
+               (channel-messages-sorted
                 irc-dir
                 (uri:uri-decode-string channel))))))))
 
@@ -79,22 +104,27 @@
 ;; Generate the HTML for a specific message in a specific room.
 ;; Used to substitute {{LIST_ITEMS}} in the room-chat template.
 (define (room-chat-item-html irc-dir channel message)
-  (let ([message-alist
-         (chatdir:channel-message-get irc-dir channel message)])
-    (if (and (list? message-alist)
-             (string? (car message-alist)))
-        (html-from-template
-         "templates/room-chat-item.html"
-         `(("MESSAGE_SENDER"
-            . ,(html-encode-string
-                (alist-ref 'user.chat.sender (cdr message-alist))))
-           ("MESSAGE_DATE"
-            . ,(html-encode-string
-                (alist-ref 'user.chat.date (cdr message-alist))))
-           ("MESSAGE_TEXT"
-            . ,(html-encode-string
-                (car message-alist)))))
-        "")))
+  (if (and (list? message)
+           (string? (car message)))
+      (html-from-template
+       "templates/room-chat-item.html"
+       `(("MESSAGE_SENDER"
+          . ,(html-encode-string
+              (alist-ref 'user.chat.sender (cdr message))))
+         ("MESSAGE_DATE"
+          . ,(html-encode-string
+              (date->string
+               (alist-ref 'user.chat.date (cdr message))
+               "~Y-~m-~d")))
+         ("MESSAGE_TIME"
+          . ,(html-encode-string
+              (date->string
+               (alist-ref 'user.chat.date (cdr message))
+               "~H:~M:~S")))
+         ("MESSAGE_TEXT"
+          . ,(html-encode-string
+              (car message)))))
+      ""))
 
 
 ;; Send response for a listing of joined rooms.
