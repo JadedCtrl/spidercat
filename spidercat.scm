@@ -16,8 +16,8 @@
 ;;
 
 (import scheme
-        (chicken io) (chicken sort) (chicken string) (chicken irregex)
-        (chicken pretty-print)
+        (chicken file) (chicken io) (chicken sort) (chicken string)
+        (chicken irregex) (chicken pretty-print)
         srfi-1 srfi-19
         (prefix chatdir chatdir:)
         (prefix intarweb intarweb:)
@@ -94,6 +94,30 @@
              (alist-ref 'user.chat.date (cdr b))))))
 
 
+(define (channel-online-users irc-dir channel)
+  (directory
+   (string-append irc-dir "/" channel "/.users/online/")))
+
+
+(define (room-users-html irc-dir channel)
+  (html-from-template
+   "templates/room-user-list.html"
+   `(("ROOM_TITLE" . ,(uri:uri-decode-string channel))
+     ("LIST_ITEMS"
+      . ,(reduce-right
+          string-append ""
+          (map (lambda (user)
+                 (room-users-item-html irc-dir channel user))
+               (channel-online-users
+                irc-dir
+                (uri:uri-decode-string channel))))))))
+
+
+(define (room-users-item-html irc-dir channel user)
+  (html-from-template
+   "templates/room-user-list-item.html"
+   `(("USER_NAME" . ,user))))
+
 
 ;; Generate the HTML listing a room's chat messages.
 (define (room-chat-html irc-dir channel)
@@ -143,9 +167,20 @@
 
 
 (define (http-get-room-dir irc-dir #!optional request path)
-  (let ([channel (third path)])
-    (spiffy:send-response status: 'ok
-                          body: (room-chat-html irc-dir channel))))
+  (let* ([channel (third path)]
+         [channel? (member channel (chatdir:channels irc-dir))]
+         [sub-path (if (eq? (length path) 4)
+                       (fourth path) #f)])
+    (cond
+     [(not channel?)
+      (spiffy:send-response code: 404
+                            body: "<h1>That's not a channel, smh!!</h1>")]
+     [(equal? sub-path "users")
+      (spiffy:send-response status: 'ok
+                            body: (room-users-html irc-dir channel))]
+     [#t
+      (spiffy:send-response status: 'ok
+                            body: (room-chat-html irc-dir channel))])))
 
 
 
