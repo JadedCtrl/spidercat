@@ -62,6 +62,15 @@
                (chatdir:channels irc-dir)))))))
 
 
+;; “Send” a message to the given chatdir root, simply by creating a file.
+;; That was easy!
+(define (send-message irc-dir channel message)
+  (with-output-to-file
+      (string-append irc-dir "/" channel "/.in/a")
+    (lambda ()
+      (write-string message))))
+
+
 ;; Returns all of a channel's messages — in alist format, with parsed datetimes.
 (define (channel-messages irc-dir channel)
   (map (lambda (msg-alist)
@@ -139,6 +148,19 @@
                           body: (room-chat-html irc-dir channel))))
 
 
+
+(define (http-send-room-message irc-dir #!optional request path)
+  (let ([request-data (intarweb:read-urlencoded-request-data request 50000)]
+        [channel (third path)])
+    (if (alist-ref 'message request-data)
+        (begin
+          (send-message irc-dir channel (alist-ref 'message request-data))
+          ;; We don't want the page to render before the message has been sent!
+          ;; Then the user might think, “uhh my message not sent¿?”
+          (sleep 1)))
+  (http-get-room-dir irc-dir request path)))
+
+
 ;; Send response for the / index.
 (define (http-get-root #!optional irc-dir request path)
   (spiffy:send-response status: 'ok body:
@@ -166,6 +188,11 @@
     ((/ "style.css") . ,http-get-style)
     ((/ "*") . ,http-404)
     (("*") . ,http-get-root)))
+
+
+;; An associative list of POST handlers, to be used by assoc-by-path.
+(define http-post-handlers
+  `(((/ "room" "*") . ,http-send-room-message)))
 
 
 ;; Get a pair from an associative list based on the closest match to the
@@ -205,7 +232,11 @@
 
 ;; Handle all POST requests.
 (define (http-post irc-dir request continue)
-  (continue))
+    (let* ([path (uri:uri-path (intarweb:request-uri request))]
+         [handler (assoc-by-path path http-post-handlers)])
+    (if handler
+        (apply (cdr handler) (list irc-dir request path))
+        (continue))))
 
 
 ;; Creates a handler for all HTTP requests, with the given IRC dir.
