@@ -54,12 +54,34 @@
           string-append
           ""
           (map (lambda (room)
-                 (html-from-template
-                  "templates/room-list-item.html"
-                  `(("ROOM_TITLE" . ,(html-encode-string room))
-                    ("ROOM_ID" . ,(uri:uri-encode-string room))
-                    ("LAST_MESSAGE" . "nekonata: Lorem ipso facto…"))))
+                 (room-list-item-html irc-dir room))
                (chatdir:channels irc-dir)))))))
+
+
+(define (room-list-item-html irc-dir room)
+  (let* ([messages (channel-messages-sorted irc-dir room)]
+         [last-message (if (null? messages)
+                           #f (last messages))]
+         [message-text (if last-message
+                           (car last-message) "")]
+         [message-sender (if last-message
+                             (alist-ref 'user.chat.sender
+                                        (cdr last-message))
+                             "")]
+         [message-time
+          (if last-message
+              (date->string (alist-ref 'user.chat.date
+                                       (cdr last-message))
+                            "[~H:~M:~S]")
+              "")])
+    (html-from-template
+     "templates/room-list-item.html"
+     `(("ROOM_TITLE" . ,(html-encode-string room))
+       ("ROOM_ID" . ,(uri:uri-encode-string room))
+       ("LAST_MSG" . ,message-text)
+       ("LAST_TIME" . ,message-time)
+       ("LAST_MSG_SENDER" . ,message-sender)))))
+
 
 
 ;; “Send” a message to the given chatdir root, simply by creating a file.
