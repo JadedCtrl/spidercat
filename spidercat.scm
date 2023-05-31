@@ -25,7 +25,7 @@
 
 
 ;; Santize text for placement in HTML.
-(define (sanitize-html text)
+(define (html-encode-string text)
   (irregex-replace/all
    "{" (spiffy:htmlize text) "&#123;"))
 
@@ -55,30 +55,72 @@
           (map (lambda (room)
                  (html-from-template
                   "templates/room-list-item.html"
-                  `(("ROOM_TITLE" . ,room)
-                    ("ROOM_ID" . ,room)
+                  `(("ROOM_TITLE" . ,(html-encode-string room))
+                    ("ROOM_ID" . ,(uri:uri-encode-string room))
                     ("LAST_MESSAGE" . "nekonata: Lorem ipso facto…"))))
                (chatdir:channels irc-dir)))))))
 
 
+;; Generate the HTML listing a room's chat messages.
+(define (room-chat-html irc-dir channel)
+  (html-from-template
+   "templates/room-chat.html"
+   `(("ROOM_TITLE" . ,(uri:uri-decode-string channel))
+     ("LIST_ITEMS"
+      . ,(reduce-right
+          string-append ""
+          (map (lambda (message)
+                 (room-chat-item-html irc-dir channel message))
+               (chatdir:channel-messages
+                irc-dir
+                (uri:uri-decode-string channel))))))))
+
+
+;; Generate the HTML for a specific message in a specific room.
+;; Used to substitute {{LIST_ITEMS}} in the room-chat template.
+(define (room-chat-item-html irc-dir channel message)
+  (let ([message-alist
+         (chatdir:channel-message-get irc-dir channel message)])
+    (if (and (list? message-alist)
+             (string? (car message-alist)))
+        (html-from-template
+         "templates/room-chat-item.html"
+         `(("MESSAGE_SENDER"
+            . ,(html-encode-string
+                (alist-ref 'user.chat.sender (cdr message-alist))))
+           ("MESSAGE_DATE"
+            . ,(html-encode-string
+                (alist-ref 'user.chat.date (cdr message-alist))))
+           ("MESSAGE_TEXT"
+            . ,(html-encode-string
+                (car message-alist)))))
+        "")))
+
+
 ;; Send response for a listing of joined rooms.
-(define (http-get-room irc-dir #!optional request continue)
+(define (http-get-rooms-list irc-dir #!optional request path)
   (spiffy:send-response status: 'ok
                         body: (room-listing-html irc-dir)))
 
 
+(define (http-get-room-dir irc-dir #!optional request path)
+  (let ([channel (third path)])
+    (spiffy:send-response status: 'ok
+                          body: (room-chat-html irc-dir channel))))
+
+
 ;; Send response for the / index.
-(define (http-get-root #!optional irc-dir request continue)
+(define (http-get-root #!optional irc-dir request path)
   (spiffy:send-response status: 'ok body: "<h1>Index!!</h1>"))
 
 
 ;; Send a 404 response, with disappointed text.
-(define (http-404 #!optional irc-dir request continue)
+(define (http-404 #!optional irc-dir request path)
   (spiffy:send-response code: 404 body: "<h1>Sad!</h1>"))
 
 
 ;; Send the static style CSS.
-(define (http-get-style #!optional irc-dir request continue)
+(define (http-get-style #!optional irc-dir request path)
   (spiffy:send-response
    status: 'ok
    body: (call-with-input-file "templates/style.css"
@@ -88,7 +130,8 @@
 
 ;; An associative list of all GET handlers, to be used by assoc-by-path.
 (define http-get-handlers
-  `(((/ "room") . ,http-get-room)
+  `(((/ "room") . ,http-get-rooms-list)
+    ((/ "room" "*") . ,http-get-room-dir)
     ((/ "style.css") . ,http-get-style)
     ((/ "*") . ,http-404)
     ((/ "") . ,http-get-root)))
@@ -99,10 +142,13 @@
 ;;     '(/ "dad" "mom") matches, in order of precedence:
 ;;     '(/ "dad" "mom") '(/ "dad" "*") '(/ "*")
 (define (assoc-by-path path-list alist #!optional (top-level #t))
-  (print path-list)
   (let* ([our-list=
           (lambda (a b)
             (list= equal? a b))]
+         [path-list
+          (if (eq? (string-length (last path-list)) 0)
+              (drop-right path-list 1)
+              path-list)]
          [parent-path (drop-right path-list 1)]
          [exact
           (and top-level
@@ -122,7 +168,7 @@
   (let* ([path (uri:uri-path (intarweb:request-uri request))]
          [handler (assoc-by-path path http-get-handlers)])
     (if handler
-        (apply (cdr handler) (list irc-dir request continue))
+        (apply (cdr handler) (list irc-dir request path))
         (continue))))
 
 
@@ -158,4 +204,4 @@
          list-start))
 
 
-;; (start-server "/home/jaidyn/Chat/IRC/leagueh/")
+(start-server "/home/jaidyn/Chat/IRC/leagueh/")
