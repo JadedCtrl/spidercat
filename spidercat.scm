@@ -126,6 +126,10 @@
      ("ROOM_ID" . ,(uri:uri-encode-string channel)))))
 
 
+(define (room-send-html)
+  (html-from-template "templates/room-send.html" '()))
+
+
 ;; Generate the HTML listing a room's chat messages.
 (define (room-messages-html irc-dir channel)
   (html-from-template
@@ -189,23 +193,22 @@
      [(equal? sub-path "messages")
       (spiffy:send-response status: 'ok
                             body: (room-messages-html irc-dir channel))]
+     [(equal? sub-path "send")
+      (spiffy:send-response status: 'ok
+                            body: (room-send-html))]
      [(or (not sub-path) (string=? sub-path ""))
       (spiffy:send-response status: 'ok
                             body: (room-index-html irc-dir channel))])))
 
 
-
-
-(define (http-send-room-message irc-dir #!optional request path)
-  (let ([request-data (intarweb:read-urlencoded-request-data request 50000)]
-        [channel (third path)])
+(define (http-post-room-dir irc-dir #!optional request path)
+  (let* ([channel (third path)]
+         [request-data (intarweb:read-urlencoded-request-data request 50000)])
     (if (alist-ref 'message request-data)
         (begin
-          (send-message irc-dir channel (alist-ref 'message request-data))
-          ;; We don't want the page to render before the message has been sent!
-          ;; Then the user might think, “uhh my message not sent¿?”
-          (sleep 1)))
-  (http-get-room-dir irc-dir request path)))
+         (send-message irc-dir channel (alist-ref 'message request-data))
+         (sleep 1)))
+    (http-get-room-dir irc-dir request (list '/ "room" channel "messages"))))
 
 
 ;; Send response for the / index.
@@ -239,7 +242,7 @@
 
 ;; An associative list of POST handlers, to be used by assoc-by-path.
 (define http-post-handlers
-  `(((/ "room" "*") . ,http-send-room-message)))
+  `(((/ "room" "*") . ,http-post-room-dir)))
 
 
 ;; Get a pair from an associative list based on the closest match to the
