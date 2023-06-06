@@ -65,15 +65,16 @@
          [message-text (if last-message
                            (car last-message) "")]
          [message-sender (if last-message
-                             (alist-ref 'user.chat.sender
-                                        (cdr last-message))
+                             (or (alist-ref 'user.chat.sender
+                                            (cdr last-message))
+                                 "")
                              "")]
          [message-time
-          (if last-message
-              (date->string (alist-ref 'user.chat.date
-                                       (cdr last-message))
-                            "[~H:~M:~S]")
-              "")])
+                                                  (if last-message
+                                                       (date->string (alist-ref 'user.chat.date
+                                                                                (cdr last-message))
+                                                                     "[~H:~M:~S]")
+                                                      "")])
     (html-from-template
      "templates/room-list-item.html"
      `(("ROOM_TITLE" . ,(html-encode-string room))
@@ -176,7 +177,7 @@
        "templates/room-messages-item.html"
        `(("MESSAGE_SENDER"
           . ,(html-encode-string
-              (alist-ref 'user.chat.sender (cdr message))))
+              (or (alist-ref 'user.chat.sender (cdr message)) "")))
          ("MESSAGE_DATE"
           . ,(html-encode-string
               (date->string
@@ -305,10 +306,10 @@
 ;; Handle all POST requests.
 (define (http-post irc-dir request continue)
     (let* ([path (uri:uri-path (intarweb:request-uri request))]
-         [handler (assoc-by-path path http-post-handlers)])
-    (if handler
-        (apply (cdr handler) (list irc-dir request path))
-        (continue))))
+           [handler (assoc-by-path path http-post-handlers)])
+     (if handler
+         (apply (cdr handler) (list irc-dir request path))
+         (continue))))
 
 
 ;; Creates a handler for all HTTP requests, with the given IRC dir.
