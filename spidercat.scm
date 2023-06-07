@@ -70,11 +70,11 @@
                                  "")
                              "")]
          [message-time
-                                                  (if last-message
-                                                       (date->string (alist-ref 'user.chat.date
-                                                                                (cdr last-message))
-                                                                     "[~H:~M:~S]")
-                                                      "")])
+          (if last-message
+              (date->string (alist-ref 'user.chat.date
+                                       (cdr last-message))
+                            "[~H:~M:~S]")
+              "")])
     (html-from-template
      "templates/room-list-item.html"
      `(("ROOM_TITLE" . ,(html-encode-string room))
@@ -113,8 +113,16 @@
   (sort
    (channel-messages irc-dir channel)
    (lambda (a b)
-     (date>? (alist-ref 'user.chat.date (cdr a))
-             (alist-ref 'user.chat.date (cdr b))))))
+     (let ([date-a (alist-ref 'user.chat.date (cdr a))]
+           [nano-a (alist-ref 'user.chat.date.nanoseconds (cdr a))]
+           [date-b (alist-ref 'user.chat.date (cdr b))]
+           [nano-b (alist-ref 'user.chat.date.nanoseconds (cdr b))])
+       (cond [(and (date=? date-a date-b)
+                   nano-a nano-b)
+              (> (string->number nano-b)
+                  (string->number nano-a))]
+             [#t
+              (date<? date-b date-a)])))))
 
 
 (define (channel-online-users irc-dir channel)
